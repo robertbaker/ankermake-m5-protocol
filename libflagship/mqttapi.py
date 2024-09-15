@@ -6,7 +6,7 @@ import json
 import uuid
 from datetime import datetime, timedelta
 
-from libflagship.mqtt import MqttMsg, MqttPktType
+from libflagship.mqtt import MqttMsg, MqttPktType, MqttMsgType
 
 
 class AnkerMQTTBaseClient:
@@ -155,9 +155,15 @@ class AnkerMQTTBaseClient:
         while datetime.now() < end:
             timeout = (end - datetime.now()).total_seconds()
             self._mqtt.loop(timeout=timeout)
-            for _, body in self.clear_queue():
-                for obj in body:
-                    if obj["commandType"] == msgtype:
-                        return obj
+
+            for msg, body in self.clear_queue():
+                # just find any query reply and return the whole array
+                if msgtype == MqttMsgType.ZZ_MQTT_CMD_APP_QUERY_STATUS and \
+                   msg.topic.endswith("/query/reply"):
+                    return body
+                else:
+                    for obj in body:
+                        if obj["commandType"] == msgtype:
+                            return obj
 
         return None
