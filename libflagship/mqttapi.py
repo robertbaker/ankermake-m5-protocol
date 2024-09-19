@@ -6,7 +6,7 @@ import json
 import uuid
 from datetime import datetime, timedelta
 
-from libflagship.mqtt import MqttMsg, MqttPktType
+from libflagship.mqtt import MqttMsg, MqttPktType, MqttMsgType
 
 
 class AnkerMQTTBaseClient:
@@ -51,7 +51,7 @@ class AnkerMQTTBaseClient:
         try:
             pkt, tail = MqttMsg.parse(msg.payload, key=self._key)
         except Exception as E:
-            hexStr =' '.join([f'0x{byte:02x}' for byte in msg.payload])
+            hexStr = ' '.join([f'0x{byte:02x}' for byte in msg.payload])
             log.error(f"Failed to decode mqtt message\n Exception: {E}\n Message : {hexStr}")
             return
 
@@ -111,10 +111,11 @@ class AnkerMQTTBaseClient:
             m5=2,
             m6=5,
             m7=ord('F'),
-            packet_type=MqttPktType.Single,
+            packet_type=packet_type,
             packet_num=0,
             time=0,
             device_guid=guid,
+            padding=b'', # fixed by .pack()
             data=data,
         )
 
@@ -154,9 +155,15 @@ class AnkerMQTTBaseClient:
         while datetime.now() < end:
             timeout = (end - datetime.now()).total_seconds()
             self._mqtt.loop(timeout=timeout)
-            for _, body in self.clear_queue():
-                for obj in body:
-                    if obj["commandType"] == msgtype:
-                        return obj
+
+            for msg, body in self.clear_queue():
+                # just find any query reply and return the whole array
+                if msgtype == MqttMsgType.ZZ_MQTT_CMD_APP_QUERY_STATUS and \
+                   msg.topic.endswith("/query/reply"):
+                    return body
+                else:
+                    for obj in body:
+                        if obj["commandType"] == msgtype:
+                            return obj
 
         return None
