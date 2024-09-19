@@ -168,6 +168,38 @@ def mqtt_send(env, command_type, args, force):
     cli.mqtt.mqtt_command(client, cmd)
 
 
+@mqtt.command("query")
+@click.argument("query-type", type=cli.util.EnumType(MqttMsgType), required=True, metavar="<query>")
+@click.argument("args", type=cli.util.json_key_value, nargs=-1, metavar="[key=value] ...")
+@pass_env
+def mqtt_query(env, query_type, args):
+    """
+    Send raw command to printer via mqtt.
+
+    BEWARE: This is intended for developers and experts only. Sending a
+    malformed command can crash your printer, or have other unintended side
+    effects.
+
+    To see a list of known command types, run this command without arguments.
+    """
+
+    cmd = {
+        "commandType": query_type,
+        **{key: value for (key, value) in args},
+    }
+
+    if query_type == MqttMsgType.ZZ_MQTT_CMD_RECOVER_FACTORY.value:
+        log.fatal("Refusing to perform factory reset")
+        return
+
+    if query_type == MqttMsgType.ZZ_MQTT_CMD_DEVICE_NAME_SET and "devName" not in cmd:
+        log.fatal("Sending DEVICE_NAME_SET without devName=<name> will crash printer")
+        return
+
+    client = cli.mqtt.mqtt_open(env.config, env.printer_index, env.insecure)
+    cli.mqtt.mqtt_query(client, cmd)
+
+
 @mqtt.command("rename-printer")
 @click.argument("newname", type=str, required=True, metavar="<newname>")
 @pass_env
